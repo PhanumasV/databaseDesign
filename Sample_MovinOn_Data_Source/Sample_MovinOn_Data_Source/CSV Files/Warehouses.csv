@@ -1,0 +1,6 @@
+WarehouseID,Address,City,ZIP,Phone,ClimateControl,SecurityCode
+WA-1,6789 Wellington Street,"Seattle, WA",98101,(206) 555-1234,TRUE,8765
+OR-1,4599 Newman Street,"Portland, OR",97201,(503) 555-5678,FALSE,4532
+WY-1,2786 Green Street,"Cheyenne, WY",82001,(307) 555-9102,TRUE,3456
+,,,,,,
+,,,,,,

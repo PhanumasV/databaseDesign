@@ -1,0 +1,89 @@
+Query แรกคือแบบ Simple
+
+1. 
+SELECT 
+    storageunits.WarehouseID,
+    customers.ContactLast AS RenterLast,
+    storageunits.Rent AS RentPerUnit,
+    storageunits.Rent AS UnitIncome,
+    SUM(storageunits.Rent) OVER (PARTITION BY storageunits.WarehouseID) AS TotalIncomePerWarehouse,
+    SUM(storageunits.Rent) OVER () AS GrandTotalIncome
+FROM unitrentals
+JOIN storageunits
+    ON unitrentals.UnitID = storageunits.UnitID 
+   AND unitrentals.WarehouseID = storageunits.WarehouseID
+JOIN customers 
+    ON unitrentals.CustID = customers.CustID
+ORDER BY storageunits.WarehouseID, customers.ContactLast;
+
+แต่ว่า report มันแอบอ่านยากนิดนึง ลองเอาไป query ดู 
+พวก total rent per warehouse กับ grand total net มันเป็นเลขซ้ำ 
+ซึ่งจริงๆมันคือสรุปรายได้ของแต่ละ warehouse กับ รวมรายได้ทุก warehouse
+
+เธอเลย enchant เป็น lv2 ก็คือ เอาของข้างบนนี่แหละ มาต่อยอดทำให้ output มันอ่านง่ายมากขึ้น
+WITH WarehouseTotals AS (
+    SELECT 
+        unitrentals.WarehouseID,
+        CONCAT('$', FORMAT(SUM(storageunits.Rent), 2)) AS TotalRentPerWarehouse
+    FROM unitrentals
+    JOIN storageunits 
+      ON unitrentals.UnitID = storageunits.UnitID 
+     AND unitrentals.WarehouseID = storageunits.WarehouseID
+    GROUP BY unitrentals.WarehouseID
+),
+GrandTotal AS (
+    SELECT 
+        'Grand Total' AS WarehouseID, 
+        NULL AS RenterName, 
+        NULL AS RentPerUnit, 
+        NULL AS YearsRented, 
+        NULL AS TotalRentPerWarehouse,
+        CONCAT('$', FORMAT(SUM(storageunits.Rent), 2)) AS GrandTotalRent
+    FROM unitrentals
+    JOIN storageunits 
+      ON unitrentals.UnitID = storageunits.UnitID 
+     AND unitrentals.WarehouseID = storageunits.WarehouseID
+)
+-- First, select all renters' details
+SELECT 
+    unitrentals.WarehouseID,
+    CONCAT(customers.ContactLast, ', ', customers.ContactFirst) AS RenterName,
+    CONCAT('$', FORMAT(storageunits.Rent, 2)) AS RentPerUnit,
+    FORMAT(DATEDIFF(IFNULL(unitrentals.DateOut, NOW()), unitrentals.DateIn) / 365.0, 1) AS YearsRented,
+    NULL AS TotalRentPerWarehouse,  -- Warehouse totals will come later
+    NULL AS GrandTotalRent         -- Grand total will come last
+FROM unitrentals
+JOIN customers 
+  ON unitrentals.CustID = customers.CustID
+JOIN storageunits 
+  ON unitrentals.UnitID = storageunits.UnitID 
+ AND unitrentals.WarehouseID = storageunits.WarehouseID
+
+UNION ALL  
+
+-- Next, select the warehouse summary after the renter details
+SELECT 
+    WarehouseTotals.WarehouseID,
+    NULL AS RenterName,
+    NULL AS RentPerUnit,
+    NULL AS YearsRented,
+    WarehouseTotals.TotalRentPerWarehouse,  -- Total rent per warehouse
+    NULL AS GrandTotalRent    -- Grand total will appear at the end
+FROM WarehouseTotals
+
+UNION ALL  
+
+-- Finally, select the grand total for all warehouses at the end
+SELECT 
+    GrandTotal.WarehouseID, 
+    GrandTotal.RenterName, 
+    GrandTotal.RentPerUnit, 
+    GrandTotal.YearsRented, 
+    GrandTotal.TotalRentPerWarehouse, 
+    GrandTotal.GrandTotalRent
+FROM GrandTotal
+
+ORDER BY 
+    CASE WHEN WarehouseID = 'Grand Total' THEN 1 ELSE 0 END, 
+    WarehouseID, 
+    RenterName;
